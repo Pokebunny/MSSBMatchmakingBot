@@ -1,3 +1,7 @@
+# file: MSSBMatchmakingBot.py
+# author: Nick Taber / Pokebunny
+# date: 4/30/22
+
 import os
 import time
 
@@ -20,22 +24,29 @@ scope = ['https://spreadsheets.google.com/feeds',
 creds = ServiceAccountCredentials.from_json_keyfile_name('client_secret.json', scope)
 client = gspread.authorize(creds)
 
+# Access spreadsheet and store data
 stars_off_sheet = client.open_by_key("1B03IEnfOo3pAG7wBIjDW6jIHP0CTzn7jQJuxlNJebgc").worksheet("STARS-OFF")
 stars_on_sheet = client.open_by_key("1B03IEnfOo3pAG7wBIjDW6jIHP0CTzn7jQJuxlNJebgc").worksheet("STARS-ON")
 off_log_sheet = client.open_by_key("1B03IEnfOo3pAG7wBIjDW6jIHP0CTzn7jQJuxlNJebgc").worksheet("Logs-OFF")
 on_log_sheet = client.open_by_key("1B03IEnfOo3pAG7wBIjDW6jIHP0CTzn7jQJuxlNJebgc").worksheet("Logs-ON")
+# Create a list of all player ratings (to be used for defining percentile search ranges)
 off_rating_list = list(map(int, stars_off_sheet.col_values(5)[1:]))
 on_rating_list = list(map(int, stars_on_sheet.col_values(5)[1:]))
 
+# Constant for starting percentile range for matchmaking search
 PERCENTILE_RANGE = 0.10
+# Constant to tell the bot where to post matchmaking updates
 MM_CHANNEL_ID = 968987148357349399
+# The matchmaking queue
 queue = {}
 
 
 @bot.event
 async def on_ready():
     print(f'{bot.user} has connected to Discord!')
+    # Start timed tasks
     refresh_queue.start()
+    refresh_api_data.start()
 
 
 # Command for a player to enter the matchmaking queue
@@ -51,10 +62,12 @@ async def enter_queue(ctx, game_type="ranked"):
     player_id = str(ctx.author.id)
     player_name = ctx.author.name
     if game_type == "stars":
+        # TODO: Avoid accessing the API every time someone queues
         matches = on_log_sheet.findall(player_id)
         if matches:
             player_rating = round(float(on_log_sheet.cell(matches[-1].row, matches[-1].col + 3).value))
     else:
+        # TODO: Avoid accessing the API every time someone queues
         matches = off_log_sheet.findall(player_id)
         if matches:
             player_rating = round(float(off_log_sheet.cell(matches[-1].row, matches[-1].col + 3).value))
@@ -88,7 +101,7 @@ async def refresh_queue():
         time_in_queue = time.time() - queue[player]["Time"]
         if time_in_queue > 120:
             new_range = PERCENTILE_RANGE * time_in_queue / 120
-            min_rating, max_rating = calc_search_range(queue[player]["Rating"], new_range)
+            min_rating, max_rating = calc_search_range(queue[player]["Rating"], queue[player]["Game Type"], new_range)
             if await check_for_match(player, min_rating, max_rating, 120):
                 post_queue_status(MM_CHANNEL_ID)
                 break
