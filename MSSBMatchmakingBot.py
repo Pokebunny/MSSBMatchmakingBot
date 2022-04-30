@@ -52,10 +52,12 @@ async def enter_queue(ctx, game_type="ranked"):
     player_name = ctx.author.name
     if game_type == "stars":
         matches = on_log_sheet.findall(player_id)
+        if matches:
+            player_rating = round(float(on_log_sheet.cell(matches[-1].row, matches[-1].col + 3).value))
     else:
         matches = off_log_sheet.findall(player_id)
-    if matches:
-        player_rating = round(float(off_log_sheet.cell(matches[-1].row, matches[-1].col + 3).value))
+        if matches:
+            player_rating = round(float(off_log_sheet.cell(matches[-1].row, matches[-1].col + 3).value))
 
     # put player in queue
     queue[player_id] = {"Name": player_name, "Rating": player_rating, "Time": time.time(), "Game Type": game_type}
