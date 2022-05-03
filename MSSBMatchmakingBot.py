@@ -5,6 +5,9 @@
 import os
 import time
 
+import discord
+from discord import ButtonStyle
+from discord.ui import Button, View
 from discord.ext import commands, tasks
 from dotenv import load_dotenv
 
@@ -14,9 +17,10 @@ from oauth2client.service_account import ServiceAccountCredentials
 # load .env file which has discord token
 load_dotenv()
 TOKEN = os.getenv('MMBOT_TOKEN')
+intents = discord.Intents.all()
 
 # initialize the bot commands with the associated prefix
-bot = commands.Bot(command_prefix='%')
+bot = commands.Bot(command_prefix='%', intents=intents)
 
 # use creds to create a client to interact with the Google Drive API
 scope = ['https://spreadsheets.google.com/feeds',
@@ -35,15 +39,62 @@ on_rating_list = list(map(int, stars_on_sheet.col_values(5)[1:]))
 
 # Constant for starting percentile range for matchmaking search
 PERCENTILE_RANGE = 0.10
+# Constant to tell the bot where the matchmaking buttons appear
+BUTTON_CHANNEL_ID = 971164238888468520
 # Constant to tell the bot where to post matchmaking updates
-MM_CHANNEL_ID = 968987148357349399
+MATCH_CHANNEL_ID = 971164132063727636
 # The matchmaking queue
 queue = {}
+# The message with the matchmaking bot stuff
+mm_message = None
 
 
 @bot.event
 async def on_ready():
+    global mm_message
     print(f'{bot.user} has connected to Discord!')
+    # Initialize matchmaking buttons
+    ranked_button = Button(label="Stars-Off Ranked", style=ButtonStyle.blurple, custom_id="ranked")
+
+    async def ranked_press(interaction):
+        await interaction.response.defer()
+        await enter_queue(interaction, "Stars-Off Ranked")
+        await interaction.followup.send("You have entered the Stars-Off Ranked queue.", ephemeral=True)
+    ranked_button.callback = ranked_press
+
+    unranked_button = Button(label="Stars-Off Unranked", style=ButtonStyle.blurple)
+
+    async def unranked_press(interaction):
+        await interaction.response.defer()
+        await enter_queue(interaction, "Stars-Off Unranked")
+        await interaction.followup.send("You have entered the Stars-Off Unranked queue.", ephemeral=True)
+    unranked_button.callback = unranked_press
+
+    stars_button = Button(label="Stars-on", style=ButtonStyle.blurple)
+
+    async def stars_press(interaction):
+        await interaction.response.defer()
+        await enter_queue(interaction, "Stars-On")
+        await interaction.followup.send("You have entered the Stars-On queue.", ephemeral=True)
+    stars_button.callback = stars_press
+
+    dequeue_button = Button(label="Leave queue", style=ButtonStyle.red)
+
+    async def dequeue_press(interaction):
+        await interaction.response.defer()
+        await exit_queue(interaction)
+        await interaction.followup.send("You have left the matchmaking queue.", ephemeral=True)
+    dequeue_button.callback = dequeue_press
+
+    button_view = View()
+    button_view.add_item(ranked_button)
+    button_view.add_item(unranked_button)
+    button_view.add_item(stars_button)
+    button_view.add_item(dequeue_button)
+    channel = bot.get_channel(BUTTON_CHANNEL_ID)
+    await channel.send("Press the buttons below to find a game! Rules and other details can be found above.")
+    mm_message = await channel.send("Matchmaking queue initialized! Press buttons above to search for a game.", view=button_view)
+
     # Start timed tasks
     refresh_queue.start()
     refresh_api_data.start()
@@ -52,16 +103,12 @@ async def on_ready():
 # Command for a player to enter the matchmaking queue
 # If they are in the queue already, it will refresh their presence in the queue
 # You can also move from one queue to another with this
-@bot.command(name="queue", aliases=["q"], help="Enter queue")
-async def enter_queue(ctx, game_type="ranked"):
-    await ctx.message.delete()
-    if game_type.lower() not in ["ranked", "unranked", "stars"]:
-        await ctx.send("Invalid game type")
-        return False
+# @bot.command(name="queue", aliases=["q"], help="Enter queue")
+async def enter_queue(interaction, game_type="Stars-Off Ranked"):
     player_rating = 1400
-    player_id = str(ctx.author.id)
-    player_name = ctx.author.name
-    if game_type == "stars":
+    player_id = str(interaction.user.id)
+    player_name = interaction.user.name
+    if game_type == "Stars-On":
         # TODO: Avoid accessing the API every time someone queues
         matches = on_log_sheet.findall(player_id)
         if matches:
@@ -81,21 +128,20 @@ async def enter_queue(ctx, game_type="ranked"):
     # check for match
     await check_for_match(player_id, min_rating, max_rating, 0)
 
-    await post_queue_status(ctx.channel.id)
+    await post_queue_status()
 
 
 # Command for a player to remove themselves from the queue
 # If they aren't in the queue, it will just post a message with the queue status
-@bot.command(name="dequeue", aliases=["dq"], help="Exit queue")
-async def exit_queue(ctx):
-    await ctx.message.delete()
-    if str(ctx.author.id) in queue:
-        del queue[str(ctx.author.id)]
-    await post_queue_status(ctx.channel.id)
+# @bot.command(name="dequeue", aliases=["dq"], help="Exit queue")
+async def exit_queue(interaction):
+    if str(interaction.user.id) in queue:
+        del queue[str(interaction.user.id)]
+    await post_queue_status()
 
 
 # refresh to see if a match can now be created with players waiting in the queue
-@tasks.loop(seconds=30)
+@tasks.loop(seconds=10)
 async def refresh_queue():
     for player in queue:
         time_in_queue = time.time() - queue[player]["Time"]
@@ -103,7 +149,7 @@ async def refresh_queue():
             new_range = PERCENTILE_RANGE * time_in_queue / 120
             min_rating, max_rating = calc_search_range(queue[player]["Rating"], queue[player]["Game Type"], new_range)
             if await check_for_match(player, min_rating, max_rating, 120):
-                post_queue_status(MM_CHANNEL_ID)
+                post_queue_status()
                 break
 
 
@@ -120,27 +166,29 @@ async def refresh_api_data():
 
 
 # Send a message with the current queue status to the designated channel
-async def post_queue_status(channel_id):
-    channel = bot.get_channel(channel_id)
+async def post_queue_status():
+    global mm_message
     ranked_q = unranked_q = stars_q = 0
     for user in queue:
-        if queue[user]["Game Type"] == "ranked":
+        if queue[user]["Game Type"] == "Stars-Off Ranked":
             ranked_q += 1
-        if queue[user]["Game Type"] == "unranked":
+        if queue[user]["Game Type"] == "Stars-Off Unranked":
             unranked_q += 1
-        if queue[user]["Game Type"] == "stars":
+        if queue[user]["Game Type"] == "Stars-On":
             stars_q += 1
-    print(queue)
-    await channel.send("There are " + str(len(queue)) + " users in the matchmaking queue (" + str(ranked_q) + " ranked, " + str(unranked_q) + " unranked, " + str(stars_q) + " stars-on)")
+    # print(queue)
+    await mm_message.edit(content="There are " + str(len(queue)) + " users in the matchmaking queue (" + str(ranked_q) + " ranked, " + str(unranked_q) + " unranked, " + str(stars_q) + " stars-on)")
 
 
 # params: player's rating and what percentile you want your search range to cover
 # return: min and max rating the player can match against
 def calc_search_range(rating, game_type, percentile):
-    if game_type == "stars":
+    if game_type == "Stars-On":
         rating_list_copy = on_rating_list.copy()
     else:
         rating_list_copy = off_rating_list.copy()
+    if game_type != "Stars-Off Ranked":
+        percentile = percentile * 2
     rating_list_copy.append(rating)
     pct_list = sorted(rating_list_copy, reverse=True)
     max_index = round(pct_list.index(rating) - (len(pct_list) * percentile))
@@ -159,8 +207,8 @@ def calc_search_range(rating, game_type, percentile):
 # Checks if there is an available match for a user.
 # Uses their user_id, search range (min-max ratings), and the min time an opponent must be searching to be matched.
 async def check_for_match(user_id, min_rating, max_rating, min_time):
-    print("Rating:", queue[user_id]["Rating"], "Time:", round(time.time() - queue[user_id]["Time"]), "Rating Range", min_rating, max_rating)
-    channel = bot.get_channel(MM_CHANNEL_ID)
+    # print("Rating:", queue[user_id]["Rating"], "Time:", round(time.time() - queue[user_id]["Time"]), "Rating Range", min_rating, max_rating)
+    channel = bot.get_channel(MATCH_CHANNEL_ID)
     if len(queue) >= 2:
         best_match = False
         for player in queue:
@@ -171,7 +219,7 @@ async def check_for_match(user_id, min_rating, max_rating, min_time):
                     best_match = player
 
         if best_match:
-            await channel.send("We have a match! <@" + user_id + "> vs <@" + best_match + ">")
+            await channel.send("We have a " + queue[user_id]["Game Type"] + " match! <@" + user_id + "> vs <@" + best_match + ">")
             del queue[best_match]
             del queue[user_id]
             return True
