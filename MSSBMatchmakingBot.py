@@ -1,6 +1,6 @@
 # file: MSSBMatchmakingBot.py
 # author: Nick Taber / Pokebunny
-# date: 4/30/22
+# date: 5/3/22
 
 import os
 import time
@@ -34,8 +34,8 @@ stars_on_sheet = client.open_by_key("1B03IEnfOo3pAG7wBIjDW6jIHP0CTzn7jQJuxlNJebg
 off_log_sheet = client.open_by_key("1B03IEnfOo3pAG7wBIjDW6jIHP0CTzn7jQJuxlNJebgc").worksheet("Logs-OFF")
 on_log_sheet = client.open_by_key("1B03IEnfOo3pAG7wBIjDW6jIHP0CTzn7jQJuxlNJebgc").worksheet("Logs-ON")
 # Create a list of all player ratings (to be used for defining percentile search ranges)
-off_rating_list = list(map(int, stars_off_sheet.col_values(5)[1:]))
-on_rating_list = list(map(int, stars_on_sheet.col_values(5)[1:]))
+off_rating_list = sorted(list(map(int, stars_off_sheet.col_values(5)[1:])), reverse=True)
+on_rating_list = sorted(list(map(int, stars_on_sheet.col_values(5)[1:])), reverse=True)
 
 # Constant for starting percentile range for matchmaking search
 PERCENTILE_RANGE = 0.10
@@ -51,8 +51,17 @@ mm_message = None
 
 @bot.event
 async def on_ready():
-    global mm_message
     print(f'{bot.user} has connected to Discord!')
+    # Initialize matchmaking buttons
+    await init_buttons()
+
+    # Start timed tasks
+    refresh_queue.start()
+    refresh_api_data.start()
+
+
+async def init_buttons():
+    global mm_message
     # Initialize matchmaking buttons
     ranked_button = Button(label="Stars-Off Ranked", style=ButtonStyle.blurple, custom_id="ranked")
 
@@ -70,7 +79,7 @@ async def on_ready():
         await interaction.followup.send("You have entered the Stars-Off Unranked queue.", ephemeral=True)
     unranked_button.callback = unranked_press
 
-    stars_button = Button(label="Stars-on", style=ButtonStyle.blurple)
+    stars_button = Button(label="Stars-On", style=ButtonStyle.blurple)
 
     async def stars_press(interaction):
         await interaction.response.defer()
@@ -86,18 +95,15 @@ async def on_ready():
         await interaction.followup.send("You have left the matchmaking queue.", ephemeral=True)
     dequeue_button.callback = dequeue_press
 
-    button_view = View()
+    button_view = View(timeout=None)
     button_view.add_item(ranked_button)
     button_view.add_item(unranked_button)
     button_view.add_item(stars_button)
     button_view.add_item(dequeue_button)
     channel = bot.get_channel(BUTTON_CHANNEL_ID)
     await channel.send("Press the buttons below to find a game! Rules and other details can be found above.")
-    mm_message = await channel.send("Matchmaking queue initialized! Press buttons above to search for a game.", view=button_view)
-
-    # Start timed tasks
-    refresh_queue.start()
-    refresh_api_data.start()
+    mm_message = await channel.send("Matchmaking queue initialized! Press buttons below to search for a game.",
+                                    view=button_view)
 
 
 # Command for a player to enter the matchmaking queue
@@ -141,16 +147,15 @@ async def exit_queue(interaction):
 
 
 # refresh to see if a match can now be created with players waiting in the queue
-@tasks.loop(seconds=10)
+@tasks.loop(seconds=15)
 async def refresh_queue():
     for player in queue:
         time_in_queue = time.time() - queue[player]["Time"]
-        if time_in_queue > 120:
-            new_range = PERCENTILE_RANGE * time_in_queue / 120
-            min_rating, max_rating = calc_search_range(queue[player]["Rating"], queue[player]["Game Type"], new_range)
-            if await check_for_match(player, min_rating, max_rating, 120):
-                post_queue_status()
-                break
+        new_range = PERCENTILE_RANGE + (PERCENTILE_RANGE * time_in_queue / 180)
+        min_rating, max_rating = calc_search_range(queue[player]["Rating"], queue[player]["Game Type"], new_range)
+        if await check_for_match(player, min_rating, max_rating, 120):
+            await post_queue_status()
+            break
 
 
 # update spreadsheet API data once per minute
@@ -161,8 +166,8 @@ async def refresh_api_data():
     stars_on_sheet = client.open_by_key("1B03IEnfOo3pAG7wBIjDW6jIHP0CTzn7jQJuxlNJebgc").worksheet("STARS-ON")
     off_log_sheet = client.open_by_key("1B03IEnfOo3pAG7wBIjDW6jIHP0CTzn7jQJuxlNJebgc").worksheet("Logs-OFF")
     on_log_sheet = client.open_by_key("1B03IEnfOo3pAG7wBIjDW6jIHP0CTzn7jQJuxlNJebgc").worksheet("Logs-ON")
-    off_rating_list = list(map(int, stars_off_sheet.col_values(5)[1:]))
-    on_rating_list = list(map(int, stars_on_sheet.col_values(5)[1:]))
+    off_rating_list = sorted(list(map(int, stars_off_sheet.col_values(5)[1:])), reverse=True)
+    on_rating_list = sorted(list(map(int, stars_on_sheet.col_values(5)[1:])), reverse=True)
 
 
 # Send a message with the current queue status to the designated channel
