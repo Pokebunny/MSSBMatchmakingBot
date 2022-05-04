@@ -79,15 +79,24 @@ async def init_buttons():
         await interaction.followup.send("You have entered the Stars-Off Unranked queue.", ephemeral=True)
     unranked_button.callback = unranked_press
 
-    stars_button = Button(label="Stars-On", style=ButtonStyle.blurple)
+    stars_ranked_button = Button(label="Stars-On Ranked", style=ButtonStyle.blurple)
 
-    async def stars_press(interaction):
+    async def stars_ranked_press(interaction):
         await interaction.response.defer()
-        await enter_queue(interaction, "Stars-On")
-        await interaction.followup.send("You have entered the Stars-On queue.", ephemeral=True)
-    stars_button.callback = stars_press
+        await enter_queue(interaction, "Stars-On Ranked")
+        await interaction.followup.send("You have entered the Stars-On Ranked queue.", ephemeral=True)
+    stars_ranked_button.callback = stars_ranked_press
 
-    dequeue_button = Button(label="Leave queue", style=ButtonStyle.red)
+    stars_unranked_button = Button(label="Stars-On Unranked", style=ButtonStyle.blurple)
+
+    async def stars_unranked_press(interaction):
+        await interaction.response.defer()
+        await enter_queue(interaction, "Stars-On Unranked")
+        await interaction.followup.send("You have entered the Stars-On Unranked queue.", ephemeral=True)
+
+    stars_unranked_button.callback = stars_unranked_press
+
+    dequeue_button = Button(label="Leave Queue", style=ButtonStyle.red)
 
     async def dequeue_press(interaction):
         await interaction.response.defer()
@@ -95,11 +104,15 @@ async def init_buttons():
         await interaction.followup.send("You have left the matchmaking queue.", ephemeral=True)
     dequeue_button.callback = dequeue_press
 
+    feedback_button = Button(label="Give Feedback", style=ButtonStyle.url, url="https://forms.gle/KNKwp86VFxrgkZiW9")
+
     button_view = View(timeout=None)
     button_view.add_item(ranked_button)
     button_view.add_item(unranked_button)
-    button_view.add_item(stars_button)
+    button_view.add_item(stars_ranked_button)
+    button_view.add_item(stars_unranked_button)
     button_view.add_item(dequeue_button)
+    button_view.add_item(feedback_button)
     channel = bot.get_channel(BUTTON_CHANNEL_ID)
     await channel.send("Press the buttons below to find a game! Rules and other details can be found above.")
     mm_message = await channel.send("Matchmaking queue initialized! Press buttons below to search for a game.",
@@ -114,7 +127,7 @@ async def enter_queue(interaction, game_type="Stars-Off Ranked"):
     player_rating = 1400
     player_id = str(interaction.user.id)
     player_name = interaction.user.name
-    if game_type == "Stars-On":
+    if game_type == "Stars-On Ranked" or game_type == "Stars-On Unranked":
         # TODO: Avoid accessing the API every time someone queues
         matches = on_log_sheet.findall(player_id)
         if matches:
@@ -173,22 +186,24 @@ async def refresh_api_data():
 # Send a message with the current queue status to the designated channel
 async def post_queue_status():
     global mm_message
-    ranked_q = unranked_q = stars_q = 0
+    ranked_q = unranked_q = stars_ranked_q = stars_unranked_q = 0
     for user in queue:
         if queue[user]["Game Type"] == "Stars-Off Ranked":
             ranked_q += 1
         if queue[user]["Game Type"] == "Stars-Off Unranked":
             unranked_q += 1
-        if queue[user]["Game Type"] == "Stars-On":
-            stars_q += 1
+        if queue[user]["Game Type"] == "Stars-On Ranked":
+            stars_ranked_q += 1
+        if queue[user]["Game Type"] == "Stars-On Unranked":
+            stars_unranked_q += 1
     # print(queue)
-    await mm_message.edit(content="There are " + str(len(queue)) + " users in the matchmaking queue (" + str(ranked_q) + " ranked, " + str(unranked_q) + " unranked, " + str(stars_q) + " stars-on)")
+    await mm_message.edit(content="There are " + str(len(queue)) + " users in the matchmaking queue (" + str(ranked_q) + " ranked, " + str(unranked_q) + " unranked, " + str(stars_ranked_q) + " stars-on ranked, " + str(stars_unranked_q) + " stars-on unranked)")
 
 
 # params: player's rating and what percentile you want your search range to cover
 # return: min and max rating the player can match against
 def calc_search_range(rating, game_type, percentile):
-    if game_type == "Stars-On":
+    if game_type == "Stars-On Ranked" or game_type == "Stars-On Unranked":
         rating_list_copy = on_rating_list.copy()
     else:
         rating_list_copy = off_rating_list.copy()
