@@ -40,9 +40,9 @@ on_rating_list = sorted(list(map(int, stars_on_sheet.col_values(5)[1:])), revers
 # Constant for starting percentile range for matchmaking search
 PERCENTILE_RANGE = 0.10
 # Constant to tell the bot where the matchmaking buttons appear
-BUTTON_CHANNEL_ID = 971164238888468520
+BUTTON_CHANNEL_ID = 841761307245281320
 # Constant to tell the bot where to post matchmaking updates
-MATCH_CHANNEL_ID = 971164132063727636
+MATCH_CHANNEL_ID = 948321928760918087
 # The matchmaking queue
 queue = {}
 # The message with the matchmaking bot stuff
@@ -63,36 +63,36 @@ async def on_ready():
 async def init_buttons():
     global mm_message
     # Initialize matchmaking buttons
-    ranked_button = Button(label="Stars-Off Ranked", style=ButtonStyle.blurple, custom_id="ranked")
+    ranked_button = Button(label="Superstars-Off Ranked", style=ButtonStyle.blurple, custom_id="ranked")
 
     async def ranked_press(interaction):
         await interaction.response.defer()
-        await enter_queue(interaction, "Stars-Off Ranked")
-        await interaction.followup.send("You have entered the Stars-Off Ranked queue.", ephemeral=True)
+        await enter_queue(interaction, "Superstars-Off Ranked")
+        await interaction.followup.send("You have entered the Superstars-Off Ranked queue.", ephemeral=True)
     ranked_button.callback = ranked_press
 
-    unranked_button = Button(label="Stars-Off Unranked", style=ButtonStyle.blurple)
+    unranked_button = Button(label="Superstars-Off Unranked", style=ButtonStyle.blurple)
 
     async def unranked_press(interaction):
         await interaction.response.defer()
-        await enter_queue(interaction, "Stars-Off Unranked")
-        await interaction.followup.send("You have entered the Stars-Off Unranked queue.", ephemeral=True)
+        await enter_queue(interaction, "Superstars-Off Unranked")
+        await interaction.followup.send("You have entered the Superstars-Off Unranked queue.", ephemeral=True)
     unranked_button.callback = unranked_press
 
-    stars_ranked_button = Button(label="Stars-On Ranked", style=ButtonStyle.blurple)
+    stars_ranked_button = Button(label="Superstars-On Ranked", style=ButtonStyle.blurple)
 
     async def stars_ranked_press(interaction):
         await interaction.response.defer()
-        await enter_queue(interaction, "Stars-On Ranked")
-        await interaction.followup.send("You have entered the Stars-On Ranked queue.", ephemeral=True)
+        await enter_queue(interaction, "Superstars-On Ranked")
+        await interaction.followup.send("You have entered the Superstars-On Ranked queue.", ephemeral=True)
     stars_ranked_button.callback = stars_ranked_press
 
-    stars_unranked_button = Button(label="Stars-On Unranked", style=ButtonStyle.blurple)
+    stars_unranked_button = Button(label="Superstars-On Unranked", style=ButtonStyle.blurple)
 
     async def stars_unranked_press(interaction):
         await interaction.response.defer()
-        await enter_queue(interaction, "Stars-On Unranked")
-        await interaction.followup.send("You have entered the Stars-On Unranked queue.", ephemeral=True)
+        await enter_queue(interaction, "Superstars-On Unranked")
+        await interaction.followup.send("You have entered the Superstars-On Unranked queue.", ephemeral=True)
 
     stars_unranked_button.callback = stars_unranked_press
 
@@ -114,7 +114,6 @@ async def init_buttons():
     button_view.add_item(dequeue_button)
     button_view.add_item(feedback_button)
     channel = bot.get_channel(BUTTON_CHANNEL_ID)
-    await channel.send("Press the buttons below to find a game! Rules and other details can be found above.")
     mm_message = await channel.send("Matchmaking queue initialized! Press buttons below to search for a game.",
                                     view=button_view)
 
@@ -123,11 +122,11 @@ async def init_buttons():
 # If they are in the queue already, it will refresh their presence in the queue
 # You can also move from one queue to another with this
 # @bot.command(name="queue", aliases=["q"], help="Enter queue")
-async def enter_queue(interaction, game_type="Stars-Off Ranked"):
+async def enter_queue(interaction, game_type="Superstars-Off Ranked"):
     player_rating = 1400
     player_id = str(interaction.user.id)
     player_name = interaction.user.name
-    if game_type == "Stars-On Ranked" or game_type == "Stars-On Unranked":
+    if game_type == "Superstars-On Ranked" or game_type == "Superstars-On Unranked":
         # TODO: Avoid accessing the API every time someone queues
         matches = on_log_sheet.findall(player_id)
         if matches:
@@ -142,7 +141,7 @@ async def enter_queue(interaction, game_type="Stars-Off Ranked"):
     queue[player_id] = {"Name": player_name, "Rating": player_rating, "Time": time.time(), "Game Type": game_type}
 
     # calculate search range
-    min_rating, max_rating = calc_search_range(player_rating, game_type.lower(), PERCENTILE_RANGE)
+    min_rating, max_rating = calc_search_range(player_rating, game_type, PERCENTILE_RANGE)
 
     # check for match
     await check_for_match(player_id, min_rating, max_rating, 0)
@@ -188,13 +187,13 @@ async def post_queue_status():
     global mm_message
     ranked_q = unranked_q = stars_ranked_q = stars_unranked_q = 0
     for user in queue:
-        if queue[user]["Game Type"] == "Stars-Off Ranked":
+        if queue[user]["Game Type"] == "Superstars-Off Ranked":
             ranked_q += 1
-        if queue[user]["Game Type"] == "Stars-Off Unranked":
+        if queue[user]["Game Type"] == "Superstars-Off Unranked":
             unranked_q += 1
-        if queue[user]["Game Type"] == "Stars-On Ranked":
+        if queue[user]["Game Type"] == "Superstars-On Ranked":
             stars_ranked_q += 1
-        if queue[user]["Game Type"] == "Stars-On Unranked":
+        if queue[user]["Game Type"] == "Superstars-On Unranked":
             stars_unranked_q += 1
     # print(queue)
     await mm_message.edit(content="There are " + str(len(queue)) + " users in the matchmaking queue (" + str(ranked_q) + " ranked, " + str(unranked_q) + " unranked, " + str(stars_ranked_q) + " stars-on ranked, " + str(stars_unranked_q) + " stars-on unranked)")
@@ -203,11 +202,11 @@ async def post_queue_status():
 # params: player's rating and what percentile you want your search range to cover
 # return: min and max rating the player can match against
 def calc_search_range(rating, game_type, percentile):
-    if game_type == "Stars-On Ranked" or game_type == "Stars-On Unranked":
+    if game_type == "Superstars-On Ranked" or game_type == "Superstars-On Unranked":
         rating_list_copy = on_rating_list.copy()
     else:
         rating_list_copy = off_rating_list.copy()
-    if game_type != "Stars-Off Ranked":
+    if game_type != "Superstars-Off Ranked":
         percentile = percentile * 2
     rating_list_copy.append(rating)
     pct_list = sorted(rating_list_copy, reverse=True)
@@ -227,7 +226,7 @@ def calc_search_range(rating, game_type, percentile):
 # Checks if there is an available match for a user.
 # Uses their user_id, search range (min-max ratings), and the min time an opponent must be searching to be matched.
 async def check_for_match(user_id, min_rating, max_rating, min_time):
-    # print("Rating:", queue[user_id]["Rating"], "Time:", round(time.time() - queue[user_id]["Time"]), "Rating Range", min_rating, max_rating)
+    print("Player:", queue[user_id]["Name"], "Rating:", queue[user_id]["Rating"], "Time:", round(time.time() - queue[user_id]["Time"]), "Rating Range", min_rating, max_rating)
     channel = bot.get_channel(MATCH_CHANNEL_ID)
     if len(queue) >= 2:
         best_match = False
@@ -239,7 +238,7 @@ async def check_for_match(user_id, min_rating, max_rating, min_time):
                     best_match = player
 
         if best_match:
-            await channel.send("We have a " + queue[user_id]["Game Type"] + " match! <@" + user_id + "> vs <@" + best_match + ">")
+            await channel.send("We have a " + queue[user_id]["Game Type"] + " match! <@" + user_id + "> vs <@" + best_match + ">. Find matches in <#" + str(BUTTON_CHANNEL_ID) + ">")
             del queue[best_match]
             del queue[user_id]
             return True
