@@ -93,6 +93,11 @@ async def init_buttons():
     new_view.add_item(dequeue_button)
     new_view.add_item(feedback_button)
     channel = bot.get_channel(BUTTON_CHANNEL_ID)
+    history = channel.history()
+    async for m in history:
+        if m.author == bot.user:
+            await m.delete()
+
     mm_message = await channel.send("Matchmaking queue initialized! Press buttons below to search for a game.",
                                     view=new_view)
 
