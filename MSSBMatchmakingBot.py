@@ -40,13 +40,15 @@ on_rating_list = sorted(list(map(int, stars_on_sheet.col_values(5)[1:])), revers
 # Constant for starting percentile range for matchmaking search
 PERCENTILE_RANGE = 0.10
 # Constant to tell the bot where the matchmaking buttons appear
-BUTTON_CHANNEL_ID = 841761307245281320
+BUTTON_CHANNEL_ID = 971164238888468520
 # Constant to tell the bot where to post matchmaking updates
-MATCH_CHANNEL_ID = 948321928760918087
+MATCH_CHANNEL_ID = 971164132063727636
 # The matchmaking queue
 queue = {}
 # The message with the matchmaking bot stuff
 mm_message = None
+
+mode_list = ["Superstars-Off Ranked", "Superstars-Off Unranked", "Superstars-On Ranked"]
 
 
 @bot.event
@@ -63,38 +65,19 @@ async def on_ready():
 async def init_buttons():
     global mm_message
     # Initialize matchmaking buttons
-    ranked_button = Button(label="Superstars-Off Ranked", style=ButtonStyle.blurple, custom_id="ranked")
 
-    async def ranked_press(interaction):
-        await interaction.response.defer()
-        await enter_queue(interaction, "Superstars-Off Ranked")
-        await interaction.followup.send("You have entered the Superstars-Off Ranked queue.", ephemeral=True)
-    ranked_button.callback = ranked_press
+    new_view = View(timeout=None)
 
-    unranked_button = Button(label="Superstars-Off Unranked", style=ButtonStyle.blurple)
+    for i in range(len(mode_list)):
+        button = Button(label=mode_list[i], style=ButtonStyle.blurple)
 
-    async def unranked_press(interaction):
-        await interaction.response.defer()
-        await enter_queue(interaction, "Superstars-Off Unranked")
-        await interaction.followup.send("You have entered the Superstars-Off Unranked queue.", ephemeral=True)
-    unranked_button.callback = unranked_press
+        async def press(interaction, mode=mode_list[i]):
+            await interaction.response.defer()
+            await enter_queue(interaction, mode)
+            await interaction.followup.send("You have entered the " + mode + " queue.", ephemeral=True)
 
-    stars_ranked_button = Button(label="Superstars-On Ranked", style=ButtonStyle.blurple)
-
-    async def stars_ranked_press(interaction):
-        await interaction.response.defer()
-        await enter_queue(interaction, "Superstars-On Ranked")
-        await interaction.followup.send("You have entered the Superstars-On Ranked queue.", ephemeral=True)
-    stars_ranked_button.callback = stars_ranked_press
-
-    stars_unranked_button = Button(label="Superstars-On Unranked", style=ButtonStyle.blurple)
-
-    async def stars_unranked_press(interaction):
-        await interaction.response.defer()
-        await enter_queue(interaction, "Superstars-On Unranked")
-        await interaction.followup.send("You have entered the Superstars-On Unranked queue.", ephemeral=True)
-
-    stars_unranked_button.callback = stars_unranked_press
+        button.callback = press
+        new_view.add_item(button)
 
     dequeue_button = Button(label="Leave Queue", style=ButtonStyle.red)
 
@@ -106,16 +89,12 @@ async def init_buttons():
 
     feedback_button = Button(label="Give Feedback", style=ButtonStyle.url, url="https://forms.gle/KNKwp86VFxrgkZiW9")
 
-    button_view = View(timeout=None)
-    button_view.add_item(ranked_button)
-    button_view.add_item(unranked_button)
-    button_view.add_item(stars_ranked_button)
-    button_view.add_item(stars_unranked_button)
-    button_view.add_item(dequeue_button)
-    button_view.add_item(feedback_button)
+    # button_view.add_item(stars_unranked_button)
+    new_view.add_item(dequeue_button)
+    new_view.add_item(feedback_button)
     channel = bot.get_channel(BUTTON_CHANNEL_ID)
     mm_message = await channel.send("Matchmaking queue initialized! Press buttons below to search for a game.",
-                                    view=button_view)
+                                    view=new_view)
 
 
 # Command for a player to enter the matchmaking queue
@@ -239,8 +218,10 @@ async def check_for_match(user_id, min_rating, max_rating, min_time):
 
         if best_match:
             await channel.send("We have a " + queue[user_id]["Game Type"] + " match! <@" + user_id + "> vs <@" + best_match + ">. Find matches in <#" + str(BUTTON_CHANNEL_ID) + ">")
-            del queue[best_match]
-            del queue[user_id]
+            if best_match in queue:
+                del queue[best_match]
+            if user_id in queue:
+                del queue[user_id]
             return True
         else:
             return False
