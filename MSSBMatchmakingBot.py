@@ -4,6 +4,7 @@
 
 import os
 import time
+import logging
 
 import discord
 from discord import ButtonStyle
@@ -38,7 +39,7 @@ off_rating_list = sorted(list(map(int, stars_off_sheet.col_values(5)[1:])), reve
 on_rating_list = sorted(list(map(int, stars_on_sheet.col_values(5)[1:])), reverse=True)
 
 # Constant for starting percentile range for matchmaking search
-PERCENTILE_RANGE = 0.10
+PERCENTILE_RANGE = 0.15
 # Constant to tell the bot where the matchmaking buttons appear
 BUTTON_CHANNEL_ID = 971164238888468520
 # Constant to tell the bot where to post matchmaking updates
@@ -50,6 +51,9 @@ mm_message = None
 
 mode_list = ["Superstars-Off Ranked", "Superstars-Off Unranked", "Superstars-On Ranked"]
 
+# Initialize logging
+logging.basicConfig(filename='match_log.txt', level=logging.INFO)
+match_count = 1
 
 @bot.event
 async def on_ready():
@@ -171,16 +175,15 @@ async def post_queue_status():
     global mm_message
     ranked_q = unranked_q = stars_ranked_q = stars_unranked_q = 0
     for user in queue:
+        # TODO: Refactor to use mode list
         if queue[user]["Game Type"] == "Superstars-Off Ranked":
             ranked_q += 1
         if queue[user]["Game Type"] == "Superstars-Off Unranked":
             unranked_q += 1
         if queue[user]["Game Type"] == "Superstars-On Ranked":
             stars_ranked_q += 1
-        if queue[user]["Game Type"] == "Superstars-On Unranked":
-            stars_unranked_q += 1
     # print(queue)
-    await mm_message.edit(content="There are " + str(len(queue)) + " users in the matchmaking queue (" + str(ranked_q) + " ranked, " + str(unranked_q) + " unranked, " + str(stars_ranked_q) + " stars-on ranked, " + str(stars_unranked_q) + " stars-on unranked)")
+    await mm_message.edit(content="There are " + str(len(queue)) + " users in the matchmaking queue (" + str(ranked_q) + " ranked, " + str(unranked_q) + " unranked, " + str(stars_ranked_q) + " stars-on ranked)")
 
 
 # params: player's rating and what percentile you want your search range to cover
@@ -193,6 +196,8 @@ def calc_search_range(rating, game_type, percentile):
     if game_type != "Superstars-Off Ranked":
         percentile = percentile * 2
     rating_list_copy.append(rating)
+    rating_list_copy.append(0)
+    rating_list_copy.append(3000)
     pct_list = sorted(rating_list_copy, reverse=True)
     max_index = round(pct_list.index(rating) - (len(pct_list) * percentile))
     min_index = round(pct_list.index(rating) + (len(pct_list) * percentile))
@@ -222,7 +227,13 @@ async def check_for_match(user_id, min_rating, max_rating, min_time):
                     best_match = player
 
         if best_match:
+            global match_count
             await channel.send("We have a " + queue[user_id]["Game Type"] + " match! <@" + user_id + "> vs <@" + best_match + ">. Find matches in <#" + str(BUTTON_CHANNEL_ID) + ">")
+            try:
+                logging.info(str(match_count) + " " + queue[user_id]["Game Type"] + " match: " + queue[user_id]["Name"] + " " + str(queue[user_id]["Rating"]) + " vs " + queue[best_match]["Name"] + " " + str(queue[best_match]["Rating"]))
+            except KeyError:
+                print("Double match")
+            match_count += 1
             if best_match in queue:
                 del queue[best_match]
             if user_id in queue:
