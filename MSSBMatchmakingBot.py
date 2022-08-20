@@ -1,10 +1,13 @@
 # file: MSSBMatchmakingBot.py
 # author: Nick Taber / Pokebunny
-# date: 5/3/22
+# version: 8/12/22
 
 import os
 import time
 import logging
+from json import JSONDecodeError
+
+import requests
 
 import discord
 from discord import ButtonStyle
@@ -21,13 +24,74 @@ TOKEN = os.getenv('MMBOT_TOKEN')
 intents = discord.Intents.all()
 
 # initialize the bot commands with the associated prefix
-bot = commands.Bot(command_prefix='%', intents=intents)
+bot = commands.Bot(command_prefix='%', intents=intents, case_insensitive=True)
 
 # use creds to create a client to interact with the Google Drive API
 scope = ['https://spreadsheets.google.com/feeds',
          'https://www.googleapis.com/auth/drive']
 creds = ServiceAccountCredentials.from_json_keyfile_name('client_secret.json', scope)
 client = gspread.authorize(creds)
+
+# Character ID mappings
+char_mappings = {
+    0: "Mario",
+    1: "Luigi",
+    2: "DK",
+    3: "Diddy",
+    4: "Peach",
+    5: "Daisy",
+    6: "Yoshi",
+    7: "Baby Mario",
+    8: "Baby Luigi",
+    9: "Bowser",
+    10: "Wario",
+    11: "Waluigi",
+    12: "Koopa(G)",
+    13: "Toad(R)",
+    14: "Boo",
+    15: "Toadette",
+    16: "Shy Guy(R)",
+    17: "Birdo",
+    18: "Monty",
+    19: "Bowser Jr",
+    20: "Paratroopa(R)",
+    21: "Pianta(B)",
+    22: "Pianta(R)",
+    23: "Pianta(Y)",
+    24: "Noki(B)",
+    25: "Noki(R)",
+    26: "Noki(G)",
+    27: "Bro(H)",
+    28: "Toadsworth",
+    29: "Toad(B)",
+    30: "Toad(Y)",
+    31: "Toad(G)",
+    32: "Toad(P)",
+    33: "Magikoopa(B)",
+    34: "Magikoopa(R)",
+    35: "Magikoopa(G)",
+    36: "Magikoopa(Y)",
+    37: "King Boo",
+    38: "Petey",
+    39: "Dixie",
+    40: "Goomba",
+    41: "Paragoomba",
+    42: "Koopa(R)",
+    43: "Paratroopa(G)",
+    44: "Shy Guy(B)",
+    45: "Shy Guy(Y)",
+    46: "Shy Guy(G)",
+    47: "Shy Guy(Bk)",
+    48: "Dry Bones(Gy)",
+    49: "Dry Bones(G)",
+    50: "Dry Bones(R)",
+    51: "Dry Bones(B)",
+    52: "Bro(F)",
+    53: "Bro(B)",
+    None: "None"
+}
+# Flip dictionary (I copied it from MattGree, and it's more useful to me with name : ID mappings)
+char_mappings = dict((v, k) for k, v in char_mappings.items())
 
 # Access spreadsheet and store data
 stars_off_sheet = client.open_by_key("1B03IEnfOo3pAG7wBIjDW6jIHP0CTzn7jQJuxlNJebgc").worksheet("STARS-OFF")
@@ -144,6 +208,57 @@ async def exit_queue(interaction):
     if str(interaction.user.id) in queue:
         del queue[str(interaction.user.id)]
     await post_queue_status()
+
+
+@bot.command(name="ostat", help="Look up player stats on Project Rio")
+async def o_stat(ctx, user="all", char="all"):
+    url = "https://projectrio-api-1.api.projectrio.app/detailed_stats/?exclude_pitching=1&exclude_fielding=1&exclude_misc=1&tag=Normal&tag=Ranked"
+
+    try:
+        if char != "all":
+            url += "&char_id=" + str(char_mappings[char])
+
+        all_url = url
+
+        if user != "all":
+            url += "&username=" + user
+
+        print(all_url)
+        all_response = requests.get(all_url).json()
+        print(url)
+        response = requests.get(url).json()
+
+        if user != "all":
+            url += "&username=" + user
+
+        stats = response["Stats"]["Batting"]
+        avg = stats["summary_hits"] / stats["summary_at_bats"]
+        obp = (stats["summary_hits"] + stats["summary_walks_hbp"] + stats["summary_walks_bb"]) / stats[
+            "plate_appearances"]
+        slg = (stats["summary_singles"] + (stats["summary_doubles"] * 2) + (stats["summary_triples"] * 3) + (
+                stats["summary_homeruns"] * 4)) / stats["summary_at_bats"]
+        ops = obp + slg
+        pa = stats["plate_appearances"]
+
+        overall = all_response["Stats"]["Batting"]
+        overall_obp = (overall["summary_hits"] + overall["summary_walks_hbp"] + overall["summary_walks_bb"]) / overall[
+            "plate_appearances"]
+        overall_slg = (overall["summary_singles"] + (overall["summary_doubles"] * 2) + (
+                    overall["summary_triples"] * 3) + (
+                               overall["summary_homeruns"] * 4)) / overall["summary_at_bats"]
+
+        ops_plus = ((obp / overall_obp) + (slg / overall_slg) - 1) * 100
+
+        c_o = " cOPS+"
+        if char == "all":
+            c_o = " OPS+"
+
+        await ctx.send(char + " (" + str(pa) + " PA): " + "{:.3f}".format(avg) + " / " + "{:.3f}".format(
+            obp) + " / " + "{:.3f}".format(slg) + " / " + "{:.3f}".format(ops) + ", " + str(round(ops_plus)) + c_o)
+    except JSONDecodeError:
+        await ctx.send("JSON Error")
+    except KeyError:
+        await ctx.send("Key Error")
 
 
 # refresh to see if a match can now be created with players waiting in the queue
