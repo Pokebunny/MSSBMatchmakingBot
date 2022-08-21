@@ -232,17 +232,18 @@ async def o_stat(ctx, user="all", char="all"):
             url += "&username=" + user
 
         stats = response["Stats"]["Batting"]
+        pa = stats["summary_at_bats"] + stats["summary_walks_bb"] + stats["summary_walks_hbp"] + stats["summary_sacflys"]
         avg = stats["summary_hits"] / stats["summary_at_bats"]
-        obp = (stats["summary_hits"] + stats["summary_walks_hbp"] + stats["summary_walks_bb"]) / stats[
-            "plate_appearances"]
+        obp = (stats["summary_hits"] + stats["summary_walks_hbp"] + stats["summary_walks_bb"]) / pa
         slg = (stats["summary_singles"] + (stats["summary_doubles"] * 2) + (stats["summary_triples"] * 3) + (
                 stats["summary_homeruns"] * 4)) / stats["summary_at_bats"]
         ops = obp + slg
-        pa = stats["plate_appearances"]
+        # pa = stats["plate_appearances"]
 
         overall = all_response["Stats"]["Batting"]
-        overall_obp = (overall["summary_hits"] + overall["summary_walks_hbp"] + overall["summary_walks_bb"]) / overall[
-            "plate_appearances"]
+        overall_pa = overall["summary_at_bats"] + overall["summary_walks_bb"] + overall["summary_walks_hbp"] + overall[
+            "summary_sacflys"]
+        overall_obp = (overall["summary_hits"] + overall["summary_walks_hbp"] + overall["summary_walks_bb"]) / overall_pa
         overall_slg = (overall["summary_singles"] + (overall["summary_doubles"] * 2) + (
                     overall["summary_triples"] * 3) + (
                                overall["summary_homeruns"] * 4)) / overall["summary_at_bats"]
