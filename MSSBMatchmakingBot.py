@@ -106,8 +106,14 @@ on_rating_list = sorted(list(map(int, stars_on_sheet.col_values(5)[1:])), revers
 PERCENTILE_RANGE = 0.15
 # Constant to tell the bot where the matchmaking buttons appear
 BUTTON_CHANNEL_ID = 971164238888468520
+# Prod: 841761307245281320
+# Test: 971164238888468520
+
 # Constant to tell the bot where to post matchmaking updates
 MATCH_CHANNEL_ID = 971164132063727636
+# Prod: 948321928760918087
+# Test: 971164132063727636
+
 # The matchmaking queue
 queue = {}
 # The message with the matchmaking bot stuff
@@ -210,29 +216,25 @@ async def exit_queue(interaction):
     await post_queue_status()
 
 
-@bot.command(name="ostat", help="Look up player stats on Project Rio")
+@bot.command(name="ostat", help="Look up player batting stats on Project Rio")
 async def o_stat(ctx, user="all", char="all"):
     url = "https://projectrio-api-1.api.projectrio.app/detailed_stats/?exclude_pitching=1&exclude_fielding=1&exclude_misc=1&tag=Normal&tag=Ranked"
+    all_url = url
 
     try:
         if char != "all":
             url += "&char_id=" + str(char_mappings[char])
-
-        all_url = url
+            if user != "all":
+                all_url = url
 
         if user != "all":
             url += "&username=" + user
 
-        print(all_url)
         all_response = requests.get(all_url).json()
-        print(url)
         response = requests.get(url).json()
 
-        if user != "all":
-            url += "&username=" + user
-
         stats = response["Stats"]["Batting"]
-        pa = stats["summary_at_bats"] + stats["summary_walks_bb"] + stats["summary_walks_hbp"] + stats["summary_sacflys"]
+        pa = stats["summary_at_bats"] + stats["summary_walks_bb"] + stats["summary_walks_hbp"] + stats["summary_sac_flys"]
         avg = stats["summary_hits"] / stats["summary_at_bats"]
         obp = (stats["summary_hits"] + stats["summary_walks_hbp"] + stats["summary_walks_bb"]) / pa
         slg = (stats["summary_singles"] + (stats["summary_doubles"] * 2) + (stats["summary_triples"] * 3) + (
@@ -242,7 +244,7 @@ async def o_stat(ctx, user="all", char="all"):
 
         overall = all_response["Stats"]["Batting"]
         overall_pa = overall["summary_at_bats"] + overall["summary_walks_bb"] + overall["summary_walks_hbp"] + overall[
-            "summary_sacflys"]
+            "summary_sac_flys"]
         overall_obp = (overall["summary_hits"] + overall["summary_walks_hbp"] + overall["summary_walks_bb"]) / overall_pa
         overall_slg = (overall["summary_singles"] + (overall["summary_doubles"] * 2) + (
                     overall["summary_triples"] * 3) + (
@@ -251,11 +253,55 @@ async def o_stat(ctx, user="all", char="all"):
         ops_plus = ((obp / overall_obp) + (slg / overall_slg) - 1) * 100
 
         c_o = " cOPS+"
-        if char == "all":
+        if char == "all" or user == "all":
             c_o = " OPS+"
 
         await ctx.send(char + " (" + str(pa) + " PA): " + "{:.3f}".format(avg) + " / " + "{:.3f}".format(
             obp) + " / " + "{:.3f}".format(slg) + " / " + "{:.3f}".format(ops) + ", " + str(round(ops_plus)) + c_o)
+    except JSONDecodeError:
+        await ctx.send("JSON Error")
+    except KeyError:
+        await ctx.send("Key Error")
+
+
+@bot.command(name="pstat", help="Look up player pitching stats on Project Rio")
+async def p_stat(ctx, user="all", char="all"):
+    url = "https://projectrio-api-1.api.projectrio.app/detailed_stats/?exclude_batting=1&exclude_fielding=1&exclude_misc=1&tag=Normal&tag=Ranked"
+    all_url = url
+
+    try:
+        if char != "all":
+            url += "&char_id=" + str(char_mappings[char])
+            if user != "all":
+                all_url = url
+
+        if user != "all":
+            url += "&username=" + user
+
+        all_response = requests.get(all_url).json()
+        response = requests.get(url).json()
+
+        stats = response["Stats"]["Pitching"]
+
+        # batter avg vs pitcher
+        d_avg = stats["hits_allowed"] / (stats["batters_faced"] - stats["walks_bb"] - stats["walks_hbp"])
+        era = 9 * stats["runs_allowed"] / (stats["outs_pitched"] / 3)
+        # strikeout percentage
+        kp = (stats["strikeouts_pitched"] / stats["batters_faced"]) * 100
+
+        ip = stats["outs_pitched"] // 3
+        ip_str = str(ip + (0.1 * (stats["outs_pitched"] % 3)))
+
+        overall = all_response["Stats"]["Pitching"]
+        overall_era = 9 * overall["runs_allowed"] / (overall["outs_pitched"] / 3)
+        # character ERA-
+        cera_minus = (era / overall_era) * 100
+
+        char_or_all = " cERA-"
+        if char == "all" or user == "all":
+            char_or_all = " ERA-"
+
+        await ctx.send(char + " (" + ip_str + " IP): " + "{:.3f}".format(d_avg) + " / " + "{:.2f}".format(era) + " ERA / " + "{:.1f}".format(kp) + "%" + " / " + str(round((cera_minus))) + char_or_all)
     except JSONDecodeError:
         await ctx.send("JSON Error")
     except KeyError:
