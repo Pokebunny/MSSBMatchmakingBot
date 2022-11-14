@@ -404,7 +404,7 @@ async def check_for_match(user_id, min_rating, max_rating, min_time):
 
     if 300 < round(time.time() - queue[user_id]["Time"]) < 315:
         role_id = "<@&998791156794150943>"
-        if queue["user_id"]["Game Type"] == "Superstars-On Ranked":
+        if queue[user_id]["Game Type"] == "Superstars-On Ranked":
             role_id = "<@&998791464630898808>"
         await channel.send("There is a player looking for a match in queue! " + role_id)
 
