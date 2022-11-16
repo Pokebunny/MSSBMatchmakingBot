@@ -2,6 +2,8 @@
 # author: Nick Taber / Pokebunny
 # version: 8/12/22
 
+import characters
+
 import os
 import time
 import logging
@@ -32,66 +34,6 @@ scope = ['https://spreadsheets.google.com/feeds',
 creds = ServiceAccountCredentials.from_json_keyfile_name('client_secret.json', scope)
 client = gspread.authorize(creds)
 
-# Character ID mappings
-char_mappings = {
-    0: "Mario",
-    1: "Luigi",
-    2: "DK",
-    3: "Diddy",
-    4: "Peach",
-    5: "Daisy",
-    6: "Yoshi",
-    7: "Baby Mario",
-    8: "Baby Luigi",
-    9: "Bowser",
-    10: "Wario",
-    11: "Waluigi",
-    12: "Koopa(G)",
-    13: "Toad(R)",
-    14: "Boo",
-    15: "Toadette",
-    16: "Shy Guy(R)",
-    17: "Birdo",
-    18: "Monty",
-    19: "Bowser Jr",
-    20: "Paratroopa(R)",
-    21: "Pianta(B)",
-    22: "Pianta(R)",
-    23: "Pianta(Y)",
-    24: "Noki(B)",
-    25: "Noki(R)",
-    26: "Noki(G)",
-    27: "Bro(H)",
-    28: "Toadsworth",
-    29: "Toad(B)",
-    30: "Toad(Y)",
-    31: "Toad(G)",
-    32: "Toad(P)",
-    33: "Magikoopa(B)",
-    34: "Magikoopa(R)",
-    35: "Magikoopa(G)",
-    36: "Magikoopa(Y)",
-    37: "King Boo",
-    38: "Petey",
-    39: "Dixie",
-    40: "Goomba",
-    41: "Paragoomba",
-    42: "Koopa(R)",
-    43: "Paratroopa(G)",
-    44: "Shy Guy(B)",
-    45: "Shy Guy(Y)",
-    46: "Shy Guy(G)",
-    47: "Shy Guy(Bk)",
-    48: "Dry Bones(Gy)",
-    49: "Dry Bones(G)",
-    50: "Dry Bones(R)",
-    51: "Dry Bones(B)",
-    52: "Bro(F)",
-    53: "Bro(B)",
-    None: "None"
-}
-# Flip dictionary (I copied it from MattGree, and it's more useful to me with name : ID mappings)
-char_mappings = dict((v, k) for k, v in char_mappings.items())
 
 # Access spreadsheet and store data
 stars_off_sheet = client.open_by_key("1B03IEnfOo3pAG7wBIjDW6jIHP0CTzn7jQJuxlNJebgc").worksheet("STARS-OFF")
@@ -124,6 +66,7 @@ mode_list = ["Superstars-Off Ranked", "Superstars-Off Unranked", "Superstars-On 
 # Initialize logging
 logging.basicConfig(filename='match_log.txt', level=logging.INFO)
 match_count = 1
+
 
 @bot.event
 async def on_ready():
@@ -159,6 +102,7 @@ async def init_buttons():
         await interaction.response.defer()
         await exit_queue(interaction)
         await interaction.followup.send("You have left the matchmaking queue.", ephemeral=True)
+
     dequeue_button.callback = dequeue_press
 
     feedback_button = Button(label="Give Feedback", style=ButtonStyle.url, url="https://forms.gle/KNKwp86VFxrgkZiW9")
@@ -222,8 +166,10 @@ async def o_stat(ctx, user="all", char="all"):
     all_url = url
 
     try:
+        if char.lower() in characters.aliases:
+            char = characters.mappings[characters.aliases[char.lower()]]
         if char != "all":
-            url += "&char_id=" + str(char_mappings[char])
+            url += "&char_id=" + str(characters.reverse_mappings[char])
             if user != "all":
                 all_url = url
 
@@ -234,7 +180,8 @@ async def o_stat(ctx, user="all", char="all"):
         response = requests.get(url).json()
 
         stats = response["Stats"]["Batting"]
-        pa = stats["summary_at_bats"] + stats["summary_walks_bb"] + stats["summary_walks_hbp"] + stats["summary_sac_flys"]
+        pa = stats["summary_at_bats"] + stats["summary_walks_bb"] + stats["summary_walks_hbp"] + stats[
+            "summary_sac_flys"]
         avg = stats["summary_hits"] / stats["summary_at_bats"]
         obp = (stats["summary_hits"] + stats["summary_walks_hbp"] + stats["summary_walks_bb"]) / pa
         slg = (stats["summary_singles"] + (stats["summary_doubles"] * 2) + (stats["summary_triples"] * 3) + (
@@ -245,9 +192,10 @@ async def o_stat(ctx, user="all", char="all"):
         overall = all_response["Stats"]["Batting"]
         overall_pa = overall["summary_at_bats"] + overall["summary_walks_bb"] + overall["summary_walks_hbp"] + overall[
             "summary_sac_flys"]
-        overall_obp = (overall["summary_hits"] + overall["summary_walks_hbp"] + overall["summary_walks_bb"]) / overall_pa
+        overall_obp = (overall["summary_hits"] + overall["summary_walks_hbp"] + overall[
+            "summary_walks_bb"]) / overall_pa
         overall_slg = (overall["summary_singles"] + (overall["summary_doubles"] * 2) + (
-                    overall["summary_triples"] * 3) + (
+                overall["summary_triples"] * 3) + (
                                overall["summary_homeruns"] * 4)) / overall["summary_at_bats"]
 
         ops_plus = ((obp / overall_obp) + (slg / overall_slg) - 1) * 100
@@ -270,8 +218,10 @@ async def p_stat(ctx, user="all", char="all"):
     all_url = url
 
     try:
+        if char.lower() in characters.aliases:
+            char = characters.mappings[characters.aliases[char.lower()]]
         if char != "all":
-            url += "&char_id=" + str(char_mappings[char])
+            url += "&char_id=" + str(characters.reverse_mappings[char])
             if user != "all":
                 all_url = url
 
@@ -301,7 +251,8 @@ async def p_stat(ctx, user="all", char="all"):
         if char == "all" or user == "all":
             char_or_all = " ERA-"
 
-        await ctx.send(char + " (" + ip_str + " IP): " + "{:.3f}".format(d_avg) + " / " + "{:.2f}".format(era) + " ERA / " + "{:.1f}".format(kp) + "%" + " / " + str(round((cera_minus))) + char_or_all)
+        await ctx.send(char + " (" + ip_str + " IP): " + "{:.3f}".format(d_avg) + " / " + "{:.2f}".format(
+            era) + " ERA / " + "{:.1f}".format(kp) + "%" + " / " + str(round((cera_minus))) + char_or_all)
     except JSONDecodeError:
         await ctx.send("JSON Error")
     except KeyError:
@@ -345,7 +296,8 @@ async def post_queue_status():
         if queue[user]["Game Type"] == "Superstars-On Ranked":
             stars_ranked_q += 1
     # print(queue)
-    await mm_message.edit(content="There are " + str(len(queue)) + " users in the matchmaking queue (" + str(ranked_q) + " ranked, " + str(unranked_q) + " unranked, " + str(stars_ranked_q) + " stars-on ranked)")
+    await mm_message.edit(content="There are " + str(len(queue)) + " users in the matchmaking queue (" + str(
+        ranked_q) + " ranked, " + str(unranked_q) + " unranked, " + str(stars_ranked_q) + " stars-on ranked)")
 
 
 # params: player's rating and what percentile you want your search range to cover
@@ -377,7 +329,8 @@ def calc_search_range(rating, game_type, percentile):
 # Checks if there is an available match for a user.
 # Uses their user_id, search range (min-max ratings), and the min time an opponent must be searching to be matched.
 async def check_for_match(user_id, min_rating, max_rating, min_time):
-    print("Player:", queue[user_id]["Name"], "Rating:", queue[user_id]["Rating"], "Time:", round(time.time() - queue[user_id]["Time"]), "Rating Range", min_rating, max_rating)
+    print("Player:", queue[user_id]["Name"], "Rating:", queue[user_id]["Rating"], "Time:",
+          round(time.time() - queue[user_id]["Time"]), "Rating Range", min_rating, max_rating)
     channel = bot.get_channel(MATCH_CHANNEL_ID)
     if len(queue) >= 2:
         best_match = False
@@ -385,14 +338,18 @@ async def check_for_match(user_id, min_rating, max_rating, min_time):
             if max_rating >= queue[player]["Rating"] >= min_rating and \
                     player != user_id and time.time() - queue[player]["Time"] > min_time and \
                     queue[player]["Game Type"] == queue[user_id]["Game Type"]:
-                if not best_match or abs(queue[best_match]["Rating"] - queue[user_id]["Rating"]) > abs(queue[player]["Rating"] - queue[user_id]["Rating"]):
+                if not best_match or abs(queue[best_match]["Rating"] - queue[user_id]["Rating"]) > abs(
+                        queue[player]["Rating"] - queue[user_id]["Rating"]):
                     best_match = player
 
         if best_match:
             global match_count
-            await channel.send("We have a " + queue[user_id]["Game Type"] + " match! <@" + user_id + "> vs <@" + best_match + ">. Find matches in <#" + str(BUTTON_CHANNEL_ID) + ">")
+            await channel.send("We have a " + queue[user_id][
+                "Game Type"] + " match! <@" + user_id + "> vs <@" + str(best_match) + ">. Find matches in <#" + str(BUTTON_CHANNEL_ID) + ">")
             try:
-                logging.info(str(match_count) + " " + queue[user_id]["Game Type"] + " match: " + queue[user_id]["Name"] + " " + str(queue[user_id]["Rating"]) + " vs " + queue[best_match]["Name"] + " " + str(queue[best_match]["Rating"]))
+                logging.info(str(match_count) + " " + queue[user_id]["Game Type"] + " match: " + queue[user_id][
+                    "Name"] + " " + str(queue[user_id]["Rating"]) + " vs " + queue[best_match]["Name"] + " " + str(
+                    queue[best_match]["Rating"]))
             except KeyError:
                 print("Double match")
             match_count += 1
@@ -409,6 +366,7 @@ async def check_for_match(user_id, min_rating, max_rating, min_time):
         await channel.send("There is a player looking for a match in queue! " + role_id)
 
     return False
+
 
 # run the bot
 bot.run(TOKEN)

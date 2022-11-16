@@ -9,3 +9,4 @@
 .idea/vcs.xml
 client_secret.json
 match_Log.txt
+__pycache__/characters.cpython-310.pyc
