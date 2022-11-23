@@ -365,6 +365,10 @@ async def check_for_match(user_id, min_rating, max_rating, min_time):
             role_id = "<@&998791464630898808>"
         await channel.send("There is a player looking for a match in queue! " + role_id)
 
+    if 900 < round(time.time() - queue[user_id]["Time"]) < 915:
+        user = await bot.fetch_user(user_id)
+        await user.send("You have been in the queue for 15 minutes. Please leave the queue if you have found a match or are no longer looking.")
+
     return False
 
 
