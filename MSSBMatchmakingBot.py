@@ -22,16 +22,16 @@ from oauth2client.service_account import ServiceAccountCredentials
 
 # load .env file which has discord token
 load_dotenv()
-TOKEN = os.getenv('MMBOT_TOKEN')
+TOKEN = os.getenv("MMBOT_TOKEN")
 intents = discord.Intents.all()
 
 # initialize the bot commands with the associated prefix
-bot = commands.Bot(command_prefix='%', intents=intents, case_insensitive=True)
+bot = commands.Bot(command_prefix="%", intents=intents, case_insensitive=True)
 
 # use creds to create a client to interact with the Google Drive API
-scope = ['https://spreadsheets.google.com/feeds',
-         'https://www.googleapis.com/auth/drive']
-creds = ServiceAccountCredentials.from_json_keyfile_name('client_secret.json', scope)
+scope = ["https://spreadsheets.google.com/feeds",
+         "https://www.googleapis.com/auth/drive"]
+creds = ServiceAccountCredentials.from_json_keyfile_name("client_secret.json", scope)
 client = gspread.authorize(creds)
 
 
@@ -64,13 +64,13 @@ mm_message = None
 mode_list = ["Superstars-Off Ranked", "Superstars-Off Unranked", "Superstars-On Ranked"]
 
 # Initialize logging
-logging.basicConfig(filename='match_log.txt', level=logging.INFO)
+logging.basicConfig(filename="match_log.txt", level=logging.INFO)
 match_count = 1
 
 
 @bot.event
 async def on_ready():
-    print(f'{bot.user} has connected to Discord!')
+    print(f"{bot.user} has connected to Discord!")
     # Initialize matchmaking buttons
     await init_buttons()
 
@@ -148,7 +148,7 @@ async def enter_queue(interaction, game_type="Superstars-Off Ranked"):
     # check for match
     await check_for_match(player_id, min_rating, max_rating, 0)
 
-    await post_queue_status()
+    await update_queue_status()
 
 
 # Command for a player to remove themselves from the queue
@@ -157,12 +157,12 @@ async def enter_queue(interaction, game_type="Superstars-Off Ranked"):
 async def exit_queue(interaction):
     if str(interaction.user.id) in queue:
         del queue[str(interaction.user.id)]
-    await post_queue_status()
+    await update_queue_status()
 
 
 @bot.command(name="ostat", help="Look up player batting stats on Project Rio")
 async def o_stat(ctx, user="all", char="all"):
-    url = "https://projectrio-api-1.api.projectrio.app/detailed_stats/?exclude_pitching=1&exclude_fielding=1&exclude_misc=1&tag=Normal&tag=Ranked"
+    url = "https://api.projectrio.app/detailed_stats/?exclude_pitching=1&exclude_fielding=1&exclude_misc=1&tag=Normal&tag=Ranked"
     all_url = url
 
     try:
@@ -204,8 +204,12 @@ async def o_stat(ctx, user="all", char="all"):
         if char == "all" or user == "all":
             c_o = " OPS+"
 
-        await ctx.send(char + " (" + str(pa) + " PA): " + "{:.3f}".format(avg) + " / " + "{:.3f}".format(
-            obp) + " / " + "{:.3f}".format(slg) + " / " + "{:.3f}".format(ops) + ", " + str(round(ops_plus)) + c_o)
+        embed = discord.Embed(title=user + " - " + char + " (" + str(pa) + " PA): ", description="AVG: " + "{:.3f}".format(avg) + "\nOBP: " + "{:.3f}".format(
+            obp) + "\nSLG: " + "{:.3f}".format(slg) + "\nOPS: " + "{:.3f}".format(ops) + "\n" + c_o + ": " + str(round(ops_plus)))
+
+        embed.set_thumbnail(url=characters.images[char])
+
+        await ctx.send(embed=embed)
     except JSONDecodeError:
         await ctx.send("JSON Error")
     except KeyError:
@@ -214,7 +218,7 @@ async def o_stat(ctx, user="all", char="all"):
 
 @bot.command(name="pstat", help="Look up player pitching stats on Project Rio")
 async def p_stat(ctx, user="all", char="all"):
-    url = "https://projectrio-api-1.api.projectrio.app/detailed_stats/?exclude_batting=1&exclude_fielding=1&exclude_misc=1&tag=Normal&tag=Ranked"
+    url = "https://api.projectrio.app/detailed_stats/?exclude_batting=1&exclude_fielding=1&exclude_misc=1&tag=Normal&tag=Ranked"
     all_url = url
 
     try:
@@ -251,8 +255,13 @@ async def p_stat(ctx, user="all", char="all"):
         if char == "all" or user == "all":
             char_or_all = " ERA-"
 
-        await ctx.send(char + " (" + ip_str + " IP): " + "{:.3f}".format(d_avg) + " / " + "{:.2f}".format(
-            era) + " ERA / " + "{:.1f}".format(kp) + "%" + " / " + str(round((cera_minus))) + char_or_all)
+        embed = discord.Embed(title=user + " - " + char + " (" + ip_str + " IP): ",
+                              description="opp. AVG: " + "{:.3f}".format(d_avg) + "\nERA: " + "{:.2f}".format(era) +
+                                          "\nK%: " + "{:.1f}".format(kp) + "\n" + char_or_all + ": " + str(round(cera_minus)))
+
+        embed.set_thumbnail(url=characters.images[char])
+
+        await ctx.send(embed=embed)
     except JSONDecodeError:
         await ctx.send("JSON Error")
     except KeyError:
@@ -267,7 +276,7 @@ async def refresh_queue():
         new_range = PERCENTILE_RANGE + (PERCENTILE_RANGE * time_in_queue / 180)
         min_rating, max_rating = calc_search_range(queue[player]["Rating"], queue[player]["Game Type"], new_range)
         if await check_for_match(player, min_rating, max_rating, 120):
-            await post_queue_status()
+            await update_queue_status()
             break
 
 
@@ -283,21 +292,21 @@ async def refresh_api_data():
     on_rating_list = sorted(list(map(int, stars_on_sheet.col_values(5)[1:])), reverse=True)
 
 
-# Send a message with the current queue status to the designated channel
-async def post_queue_status():
+# Update message with the current queue status
+async def update_queue_status():
     global mm_message
-    ranked_q = unranked_q = stars_ranked_q = stars_unranked_q = 0
+    queue_numbers = {}
+    for mode in mode_list:
+        queue_numbers[mode] = 0
     for user in queue:
-        # TODO: Refactor to use mode list
-        if queue[user]["Game Type"] == "Superstars-Off Ranked":
-            ranked_q += 1
-        if queue[user]["Game Type"] == "Superstars-Off Unranked":
-            unranked_q += 1
-        if queue[user]["Game Type"] == "Superstars-On Ranked":
-            stars_ranked_q += 1
+        queue_numbers[queue[user]["Game Type"]] += 1
+
+    new_message = "There are " + str(len(queue)) + " users in the matchmaking queue ("
+    for mode in mode_list:
+        new_message += str(queue_numbers[mode]) + " " + mode + ", "
+    new_message = new_message[:-2] + ")"
     # print(queue)
-    await mm_message.edit(content="There are " + str(len(queue)) + " users in the matchmaking queue (" + str(
-        ranked_q) + " ranked, " + str(unranked_q) + " unranked, " + str(stars_ranked_q) + " stars-on ranked)")
+    await mm_message.edit(content=new_message)
 
 
 # params: player's rating and what percentile you want your search range to cover
@@ -359,13 +368,13 @@ async def check_for_match(user_id, min_rating, max_rating, min_time):
                 del queue[user_id]
             return True
 
-    if 300 < round(time.time() - queue[user_id]["Time"]) < 315:
+    if 300 < time.time() - queue[user_id]["Time"] < 315:
         role_id = "<@&998791156794150943>"
         if queue[user_id]["Game Type"] == "Superstars-On Ranked":
             role_id = "<@&998791464630898808>"
         await channel.send("There is a player looking for a match in queue! " + role_id)
 
-    if 900 < round(time.time() - queue[user_id]["Time"]) < 915:
+    if 900 < time.time() - queue[user_id]["Time"] < 915:
         user = await bot.fetch_user(user_id)
         await user.send("You have been in the queue for 15 minutes. Please leave the queue if you have found a match or are no longer looking.")
 
